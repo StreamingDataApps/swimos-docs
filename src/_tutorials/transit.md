@@ -10,7 +10,7 @@ We will be utilizing an API provided by Cubic Transportation System's Umo Mobili
 ### <a name="project-creation"></a>Project Creation
 
 Let’s start by creating the root project folder. We are calling the directory `transit`. Create the `server` and `client` directories within `transit`, then go into `server`.
-```
+```console
 $ mkdir transit
 $ cd transit
 $ mkdir server client
@@ -47,17 +47,17 @@ Project name (default: server): swim-transit
 ##### <a name="minimum-files"></a>Minimum files
 
 Take note of the files that have been created for you:
-```
+```console
 build.gradle	gradle		gradlew		gradlew.bat	settings.gradle
 ```
 
 We’ll find settings.gradle contains one line of significance:
-```
+```groovy
 rootProject.name="swim-transit"
 ```
 
 We’ll create `gradle.properties` and add the following lines:
-```
+```groovy
 application.version=1.0.0
 swim.version=4.0.1
 ```
@@ -71,13 +71,13 @@ The gradle wrapper, which we strongly recommend using, has been created automati
 ### <a name="nodejs-client-setup"></a>NodeJS client setup
 
 Leave the server directory and go back up to `transit` and then enter the `client` directory we created previously and invoke `npm init`:
-```
+```console
 cd  ..
 cd  client
 ```
 
 Within `client` we’ll set up NodeJS by invoking `npm init` and accepting all the defaults:
-```
+```console
 npm init
 ```
 
@@ -93,7 +93,7 @@ From the root project directory, the directory structure will look like this:
 
 We’ll now add the initial source files for the backend application.  Navigating to the server directory under the root project directory, we’ll create additional directory structure:
 
-```
+```console
 cd ..
 cd server
 mkdir -p src/main
@@ -105,7 +105,7 @@ mkdir resources
 #### <a name="creating-initial-files"></a>Creating initial files
 
 We will be creating the following files:
-```
+```console
 server/src/main/resources/server.recon
 server/src/main/resources/agencies.csv
 server/src/main/java/module-info.java
@@ -115,13 +115,13 @@ We’ll create `server.recon` under the `resources` directory.  First we specify
 
 Next, we need to provide a CSV data file that includes columns for `id`, `state`, and `country` and refers to real transit vehicles that will will traffic via a public transit API. The file with agency information can be downloaded here:
 
-```
-https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv
-```
+<a href="https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv">
+  https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv
+</a>
 
 Lastly, we need to configure the client-facing end-point. We do that using the @web directive where we set the port to `9001`. We tie the end-point to the fabric using the `space` property so it names the fabric’s key. We turn off websocket compression by setting `serverCompressionLevel` and `clientCompressionLevel` to 0.
 
-```
+```java
 @kernel(class: 'swim.store.db.DbStoreKernel', optional: true)
 @kernel(class: 'swim.reflect.ReflectKernel', optional: true)
 
@@ -143,7 +143,7 @@ transit: @fabric {
 
 Next, we’ll move onto the `module-info.java` which specifies internal library dependencies, dependencies for our backend service, and the service implementation our service provides.
 
-```
+```java
 open module swim.transit {
   requires swim.xml;
   requires transitive swim.api;
@@ -161,7 +161,7 @@ open module swim.transit {
 
 We will be creating the following files:
 
-```
+```console
 server/src/main/resources/server.recon
 server/src/main/java/module-info.java
 server/src/main/java/swim/transit/TransitPlane.java
@@ -172,7 +172,7 @@ server/src/main/java/swim/transit/agent/Vehicle.java
 
 We’ll implement `TransitPlane` under `server/src/main/java/swim/transit/TransitPlane.java`. We begin by extending `TransitPlane` from the `AbstractPlane` base class, which will allow us to declare the application routes. The agent corresponding to each route is declared using the `@SwimAgent` annotation. The application routes are declared using the `@SwimRoute` annotation. The route itself is defined via the generic `AgentRoute` type.
 
-```
+```java
 package swim.transit;
 
 import java.util.logging.Logger;
@@ -211,7 +211,7 @@ public class TransitPlane extends AbstractPlane {
 
 We will now create a barebones Web Agent for the vehicle entity. To do that, we’ll start by extending `AbstractAgent` and override the `didStart()` method:
 
-```
+```java
 package swim.transit.agent;
 
 import swim.api.agent.AbstractAgent;
@@ -231,7 +231,7 @@ public class VehicleAgent extends AbstractAgent {
 #### <a name="interacting-with-web-agent"></a>Interacting with Web Agent
 
 Now we can run the application and confirm that the plane starts up and an agent is instantiated within the plane. From the server directory, run the following:
-```
+```console
 ./gradlew build
 ./gradlew run
 
@@ -239,7 +239,7 @@ Now we can run the application and confirm that the plane starts up and an agent
 
 Web Agent data types are simple Java classes that provide a serialization object called a form. With annotations, the amount of specification is very minimal. We’ll take an initial pass at the Vehicle data type by specifying the @Tag on the class, and the @Kind tag on the Form member variable. We’ll start with just a few fields: an id to identify a particular vehicle, and then latitude and longitude to track its geolocation. We will serialize to the internal format of SwimOS with the `Form.forClass() method`. We’ll next add a mandatory default constructor and then a more functional one. Next, we’ll use the Fluent API pattern and define getters and setters, where the latter return the object reference to support function chaining. 
 
-```
+```java
 package swim.transit.model;
 
 import java.util.Objects;
@@ -351,7 +351,7 @@ public class Vehicle {
 
 With a data structure for vehicles, we will now utilize it in the Vehicle web agent to represent state and initialize the agent via a `CommandLane`. Let’s add the following imports for the Command Lane.
 
-```
+```java
 import swim.api.SwimLane;
 import swim.api.agent.AbstractAgent;
 import swim.api.lane.CommandLane;
@@ -359,7 +359,7 @@ import swim.api.lane.CommandLane;
 
 Let’s the add the following code before `didStart()` in `VehicleAgent.java`.
 
-```
+```java
   @SwimLane("addVehicle")
   public CommandLane<Vehicle> addVehicle = this.<Vehicle>commandLane().onCommand(this::onVehicle);
 
@@ -385,24 +385,23 @@ Let’s the add the following code before `didStart()` in `VehicleAgent.java`.
   public void didStart() {
     log.info(()-> String.format("Started Agent: %s", nodeUri()));
   }
-
 ```
 
 Lastly, we’ll invoke addVehicle form the TransitPlane changing the command lane from `fake` to `addVehicle` so that the line below
 
-```
+```java
 space.command("/vehicle/US/CA/poseurs/dummy", "fake", Value.empty());
 ```
 
 becomes
 
 
-```
+```java
 space.command("/vehicle/US/CA/poseurs/dummy", "addVehicle", Value.empty());
 ```
 
 Let’s re-run our code to confirm that our command has been received and state has been stored:
-```
+```console
 ./gradlew build
 ./gradlew run
 ```
@@ -411,7 +410,7 @@ Let’s re-run our code to confirm that our command has been received and state 
 
 We will now great some lanes that hold typed state so that we can process the old and new state as new state changes stream in. In the previous iteration, we sent a command that included Vehicle state as input. Let’s store that state now for use within the agent as well as any external observers that need to follow these state changes. We’ll create a SwimLane named vehicle that will specify the externally accessible route along with the underlying state field of type `ValueLane<Vehicle>` so that we can retrieve state via get() and set(). Instead of simply overwriting the `speed` field for Vehicle state, we will store the last 10 speeds indexed by timestamp and derive acceleration using the SwimOS Map counterpart, MapLane, which provides `get()` and `put()` accessors. We’ll apply the @SwimTransient tag to the speeds and acceleration to opt out of writing to disk since there is no long-term or fault tolerance benefit to tracking current acceleration.
 
-```
+```java
 package swim.transit.agent;
 
 import swim.api.SwimLane;
@@ -472,7 +471,7 @@ public class VehicleAgent extends AbstractAgent {
 ```
 
 Let’s re-run our code to observe recordings of speed and derivations of acceleration:
-```
+```console
 ./gradlew build
 ./gradlew run
 ```
@@ -483,7 +482,7 @@ Let’s re-run our code to observe recordings of speed and derivations of accele
 
 We will now complete the implemention of the domain models, starting with the three principle models `Agency`, `Route`, and `Vehicle`. Agency provides a logical view for a specific transit system.
 
-```
+```java
 // imports
 . . .
 
@@ -549,7 +548,7 @@ public class Agency {
 
 With `Route`, we just concerns ourselves with the `tag` and `title`. There is very little to it, so we’ll just include the full body:
 
-```
+```java
 @Tag("route")
 public class Route {
 
@@ -587,7 +586,7 @@ public class Route {
 
 Lastly, we’ll now complete the model definition for `Vehicle`. Let’s add fields for:
 
-```
+```java
   private String uri = "";
   private String agency = "";
   private String routeTag = "";
@@ -599,7 +598,7 @@ Lastly, we’ll now complete the model definition for `Vehicle`. Let’s add fie
 
 And update the non-default constructor to accept the added fields:
 
-```
+```java
  public Vehicle(
     String id, String uri, String agency, String routeTag, String dirId,
     float latitude, float longitude, int speed, int secsSinceReport, int index,
@@ -612,7 +611,7 @@ Aside from this, it is simply of a matter of adding the corresponding getters an
 
 Next we’ll round our model definitions with BoundingBox, Routes, and Vehicles. We’ll capture quad regions to capture min and max longitude and latitude with BoundingBox:
 
-```
+```java
 // imports
 . . .
 
@@ -646,7 +645,7 @@ We’ll represent a list of Routes and Vehicles with specific model definitions 
 
 Here’s `Routes`, where we represent a list of routes:
 
-```
+```java
 // imports
 . . .
 
@@ -673,10 +672,9 @@ public class Routes {
 
 And here’s Vehicles, where we represent a mapping of vehicle url to vehicle:
 
-```
+```java
 // imports
 . . .
-
 
 @Tag("vehicles")
 public class Vehicles {
@@ -708,7 +706,7 @@ We’ve already implemented VehicleAgent, so we’ll move onto the remaining age
 
 Let’s implement StateAgent to manage the agencies and vehicles operating within the State. The basic lanes we’ll create maintain high-level statistics and element collections.
 
-```
+```java
  @SwimLane("count")
   public ValueLane<Value> count;
 
@@ -730,13 +728,13 @@ Let’s implement StateAgent to manage the agencies and vehicles operating withi
 
 The more interesting lanes allow us to link up members agents for Agency and Vehicle. We’ll make use of SwimOS’s `JoinValueLane` reflect the vehicle count and average vehicle speed for each Agency. We’ll reflect the topology of agencies and vehicles by aggregating each agency and each agency’s vehicles. Then, we’ll link to an agency with respect to specific lanes with `addAgency()`, while making use of AbstractAgent’s context object to send commands to other Web Agents. We will materialize the links using the downlink command exposed on all join lane types, passing in an Agency data object as the key:
 
-```
+```java
 joinAgencySpeed.downlink(agency).nodeUri(agency.getUri()).laneUri("speed").open();
 ```
 
 Here is the relevant code:
 
-```
+```java
  @SwimLane("joinAgencyCount")
   public JoinValueLane<Agency, Integer> joinAgencyCount = this.<Agency, Integer>joinValueLane()
       .didUpdate(this::updateCounts);
@@ -799,7 +797,7 @@ Here is the relevant code:
 CountryAgent will be nearly identical to StateAgent, except we’ll aggregate on the state level. `addAgency` represents the essential difference.
 
 
-```
+```java
   @SwimLane("addAgency")
   public CommandLane<Value> agencyAdd = this.<Value>commandLane()
     .onCommand((Value value) -> {
@@ -834,13 +832,13 @@ The first end-point corresponds to the `routeList` command, and will return a ro
 
 INPUT:
 
-```
+```java
 https://retro.umoiq.com/service/publicXMLFeed?command=routeList& a=sf-muni
 ```
 
 OUTPUT:
 
-```
+```xml
 <body>
 <route tag="1" title="1 - California" shortTitle="1-Calif/>
 <route tag="3" title="3 - Jackson" shortTitle="3-Jacksn"/>
@@ -855,7 +853,7 @@ OUTPUT:
 
 We can incorporate this API in our code like this:
 
-```
+```java
   private static Routes getRoutes(Agency ag) {
     try {
       final URL url = new URL(String.format(
@@ -910,7 +908,7 @@ https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a=sf-muni
 
 OUTPUT:
 
-```
+```xml
 <body>
 <vehicle id="1453" routeTag="N" dirTag="out" lat="37.7664199" lon="-
 122.44896" secsSinceReport="29" predictable="true" heading="276"/>
@@ -930,7 +928,7 @@ OUTPUT:
 
 We can incorporate this API in our code like this:
 
-```
+```java
 
   public static Vehicles getVehicleLocations(String pollUrl, Agency ag) {
     try {
