@@ -234,6 +234,7 @@ Now we can run the application and confirm that the plane starts up and an agent
 ```console
 ./gradlew build
 ./gradlew run
+```
 
 #### <a name="handling-a-command"></a>Handling a Command
 
