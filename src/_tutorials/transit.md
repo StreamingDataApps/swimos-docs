@@ -238,29 +238,10 @@ Think of `Record` as a `JSON object`, with slots being the key-value pairs. Let�
 
 #### <a name="acting-on-state-changes"></a>Acting on state changes
 
-We will now great some lanes that hold typed state so that we can process the old and new state as new state changes stream in. In the previous iteration, we sent a command that included Vehicle state as input. Let’s store that state now for use within the agent as well as any external observers that need to follow these state changes. We’ll create a SwimLane named vehicle that will specify the externally accessible route along with the underlying state field of type `ValueLane<Vehicle>` so that we can retrieve state via get() and set(). Instead of simply overwriting the `speed` field for Vehicle state, we will store the last 10 speeds indexed by timestamp and derive acceleration using the SwimOS Map counterpart, MapLane, which provides `get()` and `put()` accessors. We’ll apply the @SwimTransient tag to the speeds and acceleration to opt out of writing to disk since there is no long-term or fault tolerance benefit to tracking current acceleration.
-
-We will derive acceleration from time and speed, and maintain the last 10 speed and acceleration readings.
+We'll now modify `VehicleAgent` a bit more to derive acceleration from time and speed, as well as store the last 10 speed and acceleration data points. We're going to specify `@Transient` to opt out of backing to disk since the data is truly transient and we would prefer to start clean whenever an agent loads.
 
 ```java
-package swim.transit.agent;
-
-import swim.api.SwimLane;
-import swim.api.SwimTransient;
-import swim.api.agent.AbstractAgent;
-import swim.api.lane.CommandLane;
-import swim.api.lane.MapLane;
-import swim.api.lane.ValueLane;
-import swim.transit.model.Vehicle;
-
-import java.util.logging.Logger;
-
-public class VehicleAgent extends AbstractAgent {
-  private static final Logger log = Logger.getLogger(VehicleAgent.class.getName());
   private long lastReportedTime = 0L;
-
-  @SwimLane("vehicle")
-  public ValueLane<Vehicle> vehicle;
 
   @SwimTransient
   @SwimLane("speeds")
@@ -269,264 +250,37 @@ public class VehicleAgent extends AbstractAgent {
   @SwimTransient
   @SwimLane("accelerations")
   public MapLane<Long, Integer> accelerations;
+```
 
-  @SwimLane("addVehicle")
-  public CommandLane<Vehicle> addVehicle = this.<Vehicle>commandLane().onCommand(this::onVehicle);
+You can now modify `onUpdateVehicle` to handle acceleration and speed. 
 
-  private void onVehicle(Vehicle v) {
-    final long time = System.currentTimeMillis() - (v.getSecsSinceReport() * 1000L);
-    final int oldSpeed = vehicle.get() != null ? vehicle.get().getSpeed() : 0;
+```java 
+ private void onUpdateVehicle(Value v) {
+    final Value oldState = vehicle.get();
+    final long time = System.currentTimeMillis() - (v.get("secsSinceReport").longValue(0) * 1000L);
+    final int oldSpeed = oldState.isDefined() ? oldState.get("speed").intValue(0) : 0;
+    final int newSpeed = v.get("speed").intValue(0);
+
     this.vehicle.set(v);
-    speeds.put(time, v.getSpeed());
-    log.info(() -> String.format("onVehicle – speed: %d", speed);
+    speeds.put(time, newSpeed);
     if (speeds.size() > 10) {
       speeds.drop(speeds.size() - 10);
     }
-
-
     if (lastReportedTime > 0) {
-      final float acceleration = (float) ((v.getSpeed() - oldSpeed)) / (time - lastReportedTime) * 3600;
+      final float acceleration = (float) ((newSpeed - oldSpeed)) / (time - lastReportedTime) * 3600;
       accelerations.put(time, Math.round(acceleration));
       if (accelerations.size() > 10) {
         accelerations.drop(accelerations.size() - 10);
       }
-      log.info(() -> String.format("onVehicle – acceleration: %f", acceleration);
     }
     lastReportedTime = time;
   }
-
-  @Override
-  public void didStart() {
-    log.info(()-> String.format("Started Agent: %s", nodeUri()));
-  }
-}
 ```
 
 Let’s re-run our code to observe recordings of speed and derivations of acceleration:
 ```console
 ./gradlew build
 ./gradlew run
-```
-
-### <a name="implement-transit-domain-models"></a>Implement transit domain models
-
-#### <a name="principle-model-definitions"></a>Principle model definitions
-
-We will now complete the implementation of the domain models, starting with the three principle models `Agency`, `Route`, and `Vehicle`. Agency provides a logical view of a specific transit system.
-
-```java
-// imports
-. . .
-
-@Tag("agency")
-public class Agency {
-
-  private String id = "";
-  private String state = "";
-  private String country = "";
-  private int index = 0;
-
-  public Agency() {
-  }
-
-  public Agency(String id, String state, String country, int index) {
-    this.id = id;
-    this.state = state;
-    this.country = country;
-    this.index = index;
-  }
-
-  // getters
-  public String getId() {
-    return id;
-  }
-
-  public String getState() {
-    return state;
-  }
-
-  public String getCountry() {
-    return country;
-  }
-
-  public int getIndex() {
-    return index;
-  }
-
-  public String getUri() {
-    return "/agency/" + getCountry() + "/" + getState() + "/" + getId();
-  }
-
-  // serialize to SwimOS
-  public Value toValue() {
-    return form().mold(this).toValue();
-  }
-
-  // standard overrides of equals, hashCode, and toString
-  . . .
-
-  // definition of Form object to leverage serialization functionality
-  @Kind
-  private static Form<Agency> form;
-
-  public static Form<Agency> form() {
-    if (form == null) {
-      form = Form.forClass(Agency.class);
-    }
-    return form;
-  }
-}
-```
-
-With `Route`, we just concerns ourselves with the `tag` and `title`. There is very little to it, so we’ll just include the full body:
-
-```java
-@Tag("route")
-public class Route {
-
-  private String tag = "";
-  private String title = "";
-
-  public Route() {
-  }
-
-  public Route(String tag, String title) {
-    this.tag = tag;
-    this.title = title;
-  }
-
-  public String getTag() {
-    return tag;
-  }
-
-  public Route withTag(String tag) {
-    return new Route(tag, title);
-  }
-
-  public String getTitle() {
-    return title;
-  }
-
-  public Route withTitle(String title) {
-    return new Route(tag, title);
-  }
-
-  @Kind
-  private static Form<Route> form;
-}
-```
-
-Lastly, we’ll now complete the model definition for `Vehicle`. Let’s add fields for:
-
-```java
-  private String uri = "";
-  private String agency = "";
-  private String routeTag = "";
-  private String dirId = "";
-  private int index = 0;
-  private String heading = "";
-  private String routeTitle = "";
-```
-
-And update the non-default constructor to accept the added fields:
-
-```java
- public Vehicle(
-    String id, String uri, String agency, String routeTag, String dirId,
-    float latitude, float longitude, int speed, int secsSinceReport, int index,
-    String heading, String routeTitle) {
-```
-
-Aside from this, it is simply of a matter of adding the corresponding getters and setters, and updating the standard overrides of `equals()`, `hashCode()`, and `toString()`.
-
-#### <a name="supporting-model-definitions"></a>Supporting model definitions
-
-Next we’ll round our model definitions with BoundingBox, Routes, and Vehicles. We’ll capture quad regions to capture min and max longitude and latitude with BoundingBox:
-
-```java
-// imports
-. . .
-
-@Tag("bounds")
-public class BoundingBox {
-
-  float minLng = Float.MAX_VALUE;
-  float minLat = Float.MAX_VALUE;
-  float maxLng = Float.MIN_VALUE;
-  float maxLat = Float.MIN_VALUE;
-
-  public BoundingBox() {
-  }
-
-  public BoundingBox(float minLng, float minLat, float maxLng, float maxLat) {
-    this.minLat = minLat;
-    this.minLng = minLng;
-    this.maxLat = maxLat;
-    this.maxLng = maxLng;
-  }
-
-  // getters and standard overrides
-  . . .
-
-  @Kind
-  private static Form<BoundingBox> form;
-}
-```
-
-We’ll represent a list of Routes and Vehicles with specific model definitions that let us add elements and serialize as a list and map, respectively. 
-
-Here’s `Routes`, where we represent a list of routes:
-
-```java
-// imports
-. . .
-
-@Tag("Routes")
-public class Routes {
-
-  private final List<Route> routes = new ArrayList<Route>();
-
-  public Routes() {
-  }
-
-  public List<Route> getRoutes() {
-    return routes;
-  }
-
-  public void add(Route route) {
-    routes.add(route);
-  }
-
-  @Kind
-  private static Form<Routes> form;
-}
-```
-
-And here’s Vehicles, where we represent a mapping of vehicle url to vehicle:
-
-```java
-// imports
-. . .
-
-@Tag("vehicles")
-public class Vehicles {
-
-  private final Map<String, Vehicle> vehicles = new HashMap<String, Vehicle>();
-
-  public Vehicles() {
-  }
-
-  public Map<String, Vehicle> getVehicles() {
-    return vehicles;
-  }
-
-  public void add(Vehicle vehicle) {
-    vehicles.put(vehicle.getUri(), vehicle);
-  }
-
-  @Kind
-  private static Form<Vehicles> form;
-}
 ```
 
 ### <a name="implement-agents-for-transit-domain"></a>Implement agents for transit domain
