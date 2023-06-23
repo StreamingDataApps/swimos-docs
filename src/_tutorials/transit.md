@@ -3,13 +3,14 @@ title: Transit Tutorial
 layout: page
 ---
 
-The Transit Tutorial walks you step-by-step through creating a real-time city transit streaming application. The application involves four types of business entities: vehicles, agencies, states, and countries. These entities form a simple hierarchy where each vehicle falls under exactly one (of 67 possible) agencies. Each agency likewise falls under exactly one state, and each state falls under exactly one country.
+The Transit Tutorial walks you step-by-step through creating a small, but fully functional backend application for conveying real-time city transit information at scale, courtesy of Nstream’s SwimOS open-source, full-stack streaming data application platform. The application involves four types of business entities: vehicles, agencies, states, and countries. These entities form a simple hierarchy where each vehicle falls under exactly one (of 67 possible) agencies. Each agency likewise falls under exactly one state, and each state falls under exactly one country.
 
-We will be utilizing an API provided by Cubic Transportation System's Umo Mobility Platform to retrieve real-time transit information -- NextBus, https://retro.umoiq.com/.
+Rather than simulating data, we will be utilizing an API provided by Cubic Transportation System's Umo Mobility Platform to retrieve real-time transit information -- NextBus, https://retro.umoiq.com/.
 
 ### <a name="project-creation"></a>Project Creation
 
-Let’s start by creating the root project folder. We are calling the directory `transit`. Create the `server` and `client` directories within `transit`, then go into `server`.
+Let’s start by creating the root project folder. We are calling the directory `transit` and the `server` sub-directory.
+
 ```console
 $ mkdir transit
 $ cd transit
@@ -19,69 +20,22 @@ $ cd server
 
 #### <a name="prerequisites"></a>Prerequisites
 
-A JDK for <a href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">Java 11+</a> must be installed in order to implement the backend application. Click <a href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">here</a> for JDK installation instructions. In conjunction with this, make sure your `JAVA_HOME` environment variable is pointed to your Java installation location, and that your `PATH` includes `JAVA_HOME`. To test the client side and subscribe to streaming data, we’ll use <a href="https://nodejs.org/en/">NodeJS</a>. Click <a href="https://nodejs.org/en/">here</a> for NodeJS installation instructions.
+For this application, we'll depend on the JDK for <a href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">Java 11+</a>. Click <a href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">here</a> for JDK installation instructions. In conjunction with this, make sure your `JAVA_HOME` environment variable is pointed to your Java installation location, and that your `PATH` includes `JAVA_HOME`.
 
-#### <a name="gradle-setup"></a>Gradle Setup
+#### <a name="gradle-setup"></a>Building with Gradle
 
-We’ll be using Gradle to build the backend Java application. Click here for installation instructions. We’ll start by initializing gradle in the `server` folder:
+We’ll be using Gradle to build the backend Java application. Click here for installation instructions. We'll start with some boilerplate that will generally change little if at all between projects. First, we will copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
 
-```console
-$ gradle init
+- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/build.gradle#L22-L25
 
-Select type of project to generate:
-  1: basic
-  2: application
-  3: library
-  4: Gradle plugin
-Enter selection (default: basic) [1..4] 1
+Next, we'll copy gradle.properties to the same location:
+- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradle.properties
+- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradlew
+- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradlew.bat
+- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/settings.gradle
+- https://github.com/swimos/transit/tree/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradle/wrapper
 
-Select build script DSL:
-  1: Groovy
-  2: Kotlin
-Enter selection (default: Groovy) [1..2] 1
-
-Generate build using new APIs and behavior (some features may change in the next minor release)? (default: no) [yes, no] yes
-Project name (default: server): swim-transit
-```
-
-##### <a name="minimum-files"></a>Minimum files
-
-Take note of the files that have been created for you:
-```console
-build.gradle	gradle		gradlew		gradlew.bat	settings.gradle
-```
-
-We’ll find settings.gradle contains one line of significance:
-```groovy
-rootProject.name="swim-transit"
-```
-
-We’ll create `gradle.properties` and add the following lines:
-```groovy
-application.version=1.0.0
-swim.version=4.0.1
-```
-
-We’ll copy an existing build.gradle file from here:
-https://github.com/swimos/transit/blob/master/server/build.gradle
-[Determine how much of build.gradle is strictly necessary, and whether it is necessary to explain creating this by scratch]
-
-The gradle wrapper, which we strongly recommend using, has been created automatically for us. 
-
-### <a name="nodejs-client-setup"></a>NodeJS client setup
-
-Leave the server directory and go back up to `transit` and then enter the `client` directory we created previously and invoke `npm init`:
-```console
-cd  ..
-cd  client
-```
-
-Within `client` we’ll set up NodeJS by invoking `npm init` and accepting all the defaults:
-```console
-npm init
-```
-
-[reference swimos installs]
+`settings.gradle` specifies the root project name. `gradlew` and `gradlew.bat` are wrappers that should not generally be modified. `gradle.properties` specifies the version of the application and the swim libraries. The `gradle` directory contains the `wrapper` sub-directory which contains dependencies for `gradlew` and `gradlew.bat`, which stream-line dependency issues when using gradle. 
 
 ### <a name="project-organization"></a>Project organization
 
@@ -104,20 +58,16 @@ mkdir resources
 
 #### <a name="creating-initial-files"></a>Creating initial files
 
+We will create some configuration files, aside from `server/src/main/resources/agencies.csv`, which is a data set containing agency information that we will copy from:
+- https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv
+
+This CSV data file contains columns for `id`, `state`, and `country` and refers to real transit vehicles that will be referenced from a public transit API.
+
 We will be creating the following files:
-```console
-server/src/main/resources/server.recon
-server/src/main/resources/agencies.csv
-server/src/main/java/module-info.java
-```
+- `server/src/main/resources/server.recon`
+- `server/src/main/java/module-info.java`
 
 We’ll create `server.recon` under the `resources` directory.  First we specify kernel properties that determine runtime settings. Then, within the @fabric definition we specify the java Class that will serve as our application plane. A Plane defines a single layer (sub-application) of application to support multi-layer applications. We define @store to use the file system as a lightweight backing store, though in-memory remains the primary state store.
-
-Next, we need to provide a CSV data file that includes columns for `id`, `state`, and `country` and refers to real transit vehicles that will will traffic via a public transit API. The file with agency information can be downloaded here:
-
-<a href="https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv">
-  https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv
-</a>
 
 Lastly, we need to configure the client-facing end-point. We do that using the @web directive where we set the port to `9001`. We tie the end-point to the fabric using the `space` property so it names the fabric’s key. We turn off websocket compression by setting `serverCompressionLevel` and `clientCompressionLevel` to 0.
 
@@ -165,6 +115,9 @@ We will be creating the following files:
 server/src/main/resources/server.recon
 server/src/main/java/module-info.java
 server/src/main/java/swim/transit/TransitPlane.java
+server/src/main/java/swim/transit/agent/Agency.java
+server/src/main/java/swim/transit/agent/Country.java
+server/src/main/java/swim/transit/agent/State.java
 server/src/main/java/swim/transit/agent/Vehicle.java
 ```
 
@@ -701,7 +654,7 @@ public class Vehicles {
 
 ### <a name="implement-agents-for-transit-domain"></a>Implement agents for transit domain
 
-We’ve already implemented VehicleAgent, so we’ll move onto the remaining agents for state, country, and agent.
+We’ve already implemented VehicleAgent, so we’ll move on to the remaining agents for state, country, and agent.
 
 #### <a name="implement-state-agent"></a>Implement StateAgent
 
