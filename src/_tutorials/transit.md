@@ -297,90 +297,88 @@ Let’s implement StateAgent to manage the agencies and vehicles operating withi
 
  @SwimTransient
   @SwimLane("agencyCount")
-  public MapLane<Agency, Integer> agencyCount;
+  public MapLane<Value, Integer> agencyCount;
 
  @SwimTransient
   @SwimLane("vehicles")
-  public MapLane<String, Vehicle> vehicles;
+  public MapLane<String, Value> vehicles;
 
  @SwimLane("speed")
   public ValueLane<Float> speed;
 
   @SwimTransient
   @SwimLane("agencySpeed")
-  public MapLane<Agency, Float> agencySpeed;
+  public MapLane<Value, Float> agencySpeed;
 ```
 
-The more interesting lanes allow us to link up members agents for Agency and Vehicle. We’ll make use of SwimOS’s `JoinValueLane` reflect the vehicle count and average vehicle speed for each Agency. We’ll reflect the topology of agencies and vehicles by aggregating each agency and each agency’s vehicles. Then, we’ll link to an agency with respect to specific lanes with `addAgency()`, while making use of AbstractAgent’s context object to send commands to other Web Agents. We will materialize the links using the downlink command exposed on all join lane types, passing in an Agency data object as the key:
+The more interesting lanes allow us to link to other agents, such as Agency and Vehicle, here. We’ll make use of SwimOS’s `JoinValueLane` to reflect the vehicle count and average vehicle speed for each agency. We’ll reflect the topology of agencies and vehicles by aggregating each agency and each agency’s vehicles. Then, we’ll link to an agency with respect to specific lanes with `addAgency()`, while making use of AbstractAgent’s context object to send commands to other Web Agents. We will materialize the links using the downlink command exposed on all join lane types, passing in an Agency data object as the key:
 
 ```java
 joinAgencySpeed.downlink(agency).nodeUri(agency.getUri()).laneUri("speed").open();
 ```
 
-Here is the relevant code:
+Here is the relevant code for the StateAgent:
 
 ```java
- @SwimLane("joinAgencyCount")
-  public JoinValueLane<Agency, Integer> joinAgencyCount = this.<Agency, Integer>joinValueLane()
-      .didUpdate(this::updateCounts);
+  @SwimLane("joinAgencyCount")
+  public JoinValueLane<Value, Integer> joinAgencyCount = this.<Value, Integer>joinValueLane()
+          .didUpdate(this::updateCounts);
 
-  public void updateCounts(Agency agency, int newCount, int oldCount) {
-    int vCounts = 0;
-    final Iterator<Integer> it = joinAgencyCount.valueIterator();
-    while (it.hasNext()) {
-      final Integer next = it.next();
-      vCounts += next;
-    }
+  public void updateCounts(Value agency, int newCount, int oldCount) {
+      int vCounts = 0;
+      final Iterator<Integer> it = joinAgencyCount.valueIterator();
+      while (it.hasNext()) {
+          final Integer next = it.next();
+          vCounts += next;
+      }
 
-    final int maxCount = Integer.max(count.get().get("max").intValue(0), vCounts);
-    count.set(Record.create(2).slot("current", vCounts).slot("max", maxCount));
-    agencyCount.put(agency, newCount);
+      final int maxCount = Integer.max(count.get().get("max").intValue(0), vCounts);
+      count.set(Record.create(2).slot("current", vCounts).slot("max", maxCount));
+      agencyCount.put(agency, newCount);
+  }
+  
+  @SwimLane("joinStateSpeed")
+  public JoinValueLane<Value, Float> joinAgencySpeed = this.<Value, Float>joinValueLane()
+          .didUpdate(this::updateSpeeds);
+
+  public void updateSpeeds(Value agency, float newSpeed, float oldSpeed) {
+      float vSpeeds = 0.0f;
+      final Iterator<Float> it = joinAgencySpeed.valueIterator();
+      while (it.hasNext()) {
+          final Float next = it.next();
+          vSpeeds += next;
+      }
+      if (joinAgencyCount.size() > 0) {
+          speed.set(vSpeeds / joinAgencyCount.size());
+      }
+      agencySpeed.put(agency, newSpeed);
   }
 
- @SwimLane("joinStateSpeed")
-  public JoinValueLane<Agency, Float> joinAgencySpeed = this.<Agency, Float>joinValueLane()
-      .didUpdate(this::updateSpeeds);
-
-  public void updateSpeeds(Agency agency, float newSpeed, float oldSpeed) {
-    float vSpeeds = 0.0f;
-    final Iterator<Float> it = joinAgencySpeed.valueIterator();
-    while (it.hasNext()) {
-      final Float next = it.next();
-      vSpeeds += next;
-    }
-    if (joinAgencyCount.size() > 0) {
-      speed.set(vSpeeds / joinAgencyCount.size());
-    }
-    agencySpeed.put(agency, newSpeed);
-  }
-
- @SwimLane("joinAgencyVehicles")
-  public JoinMapLane<Agency, String, Vehicle> joinAgencyVehicles = this.<Agency, String, Vehicle>joinMapLane()
-      .didUpdate((String key, Vehicle newEntry, Vehicle oldEntry) -> vehicles.put(key, newEntry))
-      .didRemove((String key, Vehicle vehicle) -> vehicles.remove(key));
+  @SwimLane("joinAgencyVehicles")
+  public JoinMapLane<Value, String, Value> joinAgencyVehicles = this.<Value, String, Value>joinMapLane()
+          .didUpdate((String key, Value newEntry, Value oldEntry) -> vehicles.put(key, newEntry))
+          .didRemove((String key, Value vehicle) -> vehicles.remove(key));
 
   @SwimLane("addAgency")
-  public CommandLane<Agency> agencyAdd = this.<Agency>commandLane().onCommand((Agency agency) -> {
-    joinAgencyCount
-        .downlink(agency).nodeUri(agency.getUri()).laneUri("count").open();
-
-    joinAgencyVehicles
-        .downlink(agency).nodeUri(agency.getUri()).laneUri("vehicles").open();
-
-    joinAgencySpeed
-        .downlink(agency).nodeUri(agency.getUri()).laneUri("speed").open();
-
-    context.command(
-        "/country/" + getProp("country").stringValue(),
-        "addAgency",
-        agency.toValue().unflattened().slot("stateUri", nodeUri().toString()));
+  public CommandLane<Value> agencyAdd = this.<Value>commandLane().onCommand((Value agency) -> {
+      log.info("uri: " + agency.get("uri").stringValue());
+      joinAgencyCount.downlink(agency).nodeUri(agency.get("uri").stringValue()).laneUri("count").open();
+      joinAgencyVehicles.downlink(agency).nodeUri(agency.get("uri").stringValue()).laneUri("vehicles").open();
+      joinAgencySpeed.downlink(agency).nodeUri(agency.get("uri").stringValue()).laneUri("speed").open();
+      // String id, String state, String country, int index
+      Record newAgency = Record.of()
+              .slot("id", agency.get("id").stringValue())
+              .slot("state", agency.get("state").stringValue())
+              .slot("country", agency.get("country").stringValue())
+              .slot("index", agency.get("index").intValue())
+              .slot("stateUri", nodeUri().toString());
+      context.command("/country/" + getProp("country").stringValue(), "addAgency", newAgency);
   });
 ```
 
 #### <a name="implement-country-agent"></a>Implement CountryAgent
 
 CountryAgent will be nearly identical to StateAgent, except we’ll aggregate on the state level. `addAgency` represents the essential difference.
-
 
 ```java
   @SwimLane("addAgency")
@@ -411,6 +409,8 @@ There are two public transit APIs we will connect to from UmoIQ (https://retro.u
 https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a={agencyId}
 https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a={agencyId}&t=0
 
+We will encapsulate this functionality with a wrapper, `NextBusHttpAPI.java`, that will sit alongside TransitPlane.java under `server/src/main/java/swim/transit/NextBusHttpAPI.java`.
+
 ###### <a name="route-list"></a>routeList
 
 The first end-point corresponds to the `routeList` command, and will return a route object with a `tag`, `title`, and `shortTitle`. We will make use of the tag and title fields. Passing in “sf-muni” as the agency would correspond to the following input and output.
@@ -436,47 +436,49 @@ OUTPUT:
 </body>
 ```
 
-We can incorporate this API in our code like this:
+We can incorporate this API within `NextBusHttpAPI` in our code like this:
 
 ```java
-  private static Routes getRoutes(Agency ag) {
-    try {
-      final URL url = new URL(String.format(
-          "https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a=%s", ag.getId()));
-      final Value allRoutes = parse(url);
-      if (!allRoutes.isDefined()) {
-        return null;
+  private static Value getRoutes(Value ag) {
+      try {
+          final URL url = new URL(String.format(
+                  "https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a=%s", ag.get("id").stringValue()));
+          final Value allRoutes = parse(url);
+          if (!allRoutes.isDefined()) {
+              return null;
+          }
+          final Iterator<Item> it = allRoutes.iterator();
+          final Record routes = Record.of();
+          while (it.hasNext()) {
+              final Item item = it.next();
+              final Value header = item.getAttr("route");
+              if (header.isDefined()) {
+                  final Value route = Record.of()
+                          .slot("tag", header.get("tag").stringValue())
+                          .slot("title", header.get("title").stringValue());
+                  routes.item(route);
+              }
+          }
+          return routes;
+      } catch (Exception e) {
+          log.severe(() -> String.format("Exception thrown:\n%s", e));
       }
-      final Iterator<Item> it = allRoutes.iterator();
-      final Routes routes = new Routes();
-      while (it.hasNext()) {
-        final Item item = it.next();
-        final Value header = item.getAttr("route");
-        if (header.isDefined()) {
-          final Route route = new Route().withTag(header.get("tag").stringValue()).withTitle(header.get("title").stringValue());
-          routes.add(route);
-        }
-      }
-      return routes;
-    } catch (Exception e) {
-      log.severe(() -> String.format("Exception thrown:\n%s", e));
-    }
-    return null;
+      return null;
   }
 
 
   private static Value parse(URL url) {
-    final HttpURLConnection urlConnection;
-    try {
-      urlConnection = (HttpURLConnection) url.openConnection();
-      urlConnection.setRequestProperty("Accept-Encoding", "gzip, deflate");
-      final InputStream stream = new GZIPInputStream(urlConnection.getInputStream());
-      final Value configValue = Utf8.read(stream, Xml.structureParser().documentParser());
-      return configValue;
-    } catch (Throwable e) {
-      log.severe(() -> String.format("Exception thrown:\n%s", e));
-    }
-    return Value.absent();
+      final HttpURLConnection urlConnection;
+      try {
+          urlConnection = (HttpURLConnection) url.openConnection();
+          urlConnection.setRequestProperty("Accept-Encoding", "gzip, deflate");
+          final InputStream stream = new GZIPInputStream(urlConnection.getInputStream());
+          final Value configValue = Utf8.read(stream, Xml.structureParser().documentParser());
+          return configValue;
+      } catch (Throwable e) {
+          log.severe(() -> String.format("Exception thrown:\n%s", e));
+      }
+      return Value.absent();
   }
 
 ```
@@ -515,74 +517,86 @@ We can incorporate this API in our code like this:
 
 ```java
 
-  public static Vehicles getVehicleLocations(String pollUrl, Agency ag) {
-    try {
+  public static Value getVehicleLocations(String pollUrl, Value ag) {
+  try {
       final URL url = new URL(pollUrl);
       final Value vehicleLocs = parse(url);
       if (!vehicleLocs.isDefined()) {
-        return null;
+          return null;
       }
 
       final Iterator<Item> it = vehicleLocs.iterator();
-      final Vehicles vehicles = new Vehicles();
+      final Record vehicles = Record.of();
       while (it.hasNext()) {
-        final Item item = it.next();
-        final Value header = item.getAttr("vehicle");
-        if (header.isDefined()) {
-          final String id = header.get("id").stringValue().trim();
-          final String routeTag = header.get("routeTag").stringValue();
-          final float latitude = header.get("lat").floatValue(0.0f);
-          final float longitude = header.get("lon").floatValue(0.0f);
-          final int speed = header.get("speedKmHr").intValue(0);
-          final int secsSinceReport = header.get("secsSinceReport").intValue(0);
-          final String dir = header.get("dirTag").stringValue("");
-          final String dirId;
-          if (!dir.equals("")) {
-            dirId = dir.contains("_0") ? "outbound" : "inbound";
-          } else {
-            dirId = "outbound";
-          }
+          final Item item = it.next();
+          final Value header = item.getAttr("vehicle");
+          if (header.isDefined()) {
+              final String id = header.get("id").stringValue().trim();
+              final String routeTag = header.get("routeTag").stringValue();
+              final float latitude = header.get("lat").floatValue(0.0f);
+              final float longitude = header.get("lon").floatValue(0.0f);
+              final int speed = header.get("speedKmHr").intValue(0);
+              final int secsSinceReport = header.get("secsSinceReport").intValue(0);
+              final String dir = header.get("dirTag").stringValue("");
+              final String dirId;
+              if (!dir.equals("")) {
+                  dirId = dir.contains("_0") ? "outbound" : "inbound";
+              } else {
+                  dirId = "outbound";
+              }
 
-          final int headingInt = header.get("heading").intValue(0);
-          String heading = "";
-          if (headingInt < 23 || headingInt >= 338) {
-            heading = "E";
-          } else if (23 <= headingInt && headingInt < 68) {
-            heading = "NE";
-          } else if (68 <= headingInt && headingInt < 113) {
-            heading = "N";
-          } else if (113 <= headingInt && headingInt < 158) {
-            heading = "NW";
-          } else if (158 <= headingInt && headingInt < 203) {
-            heading = "W";
-          } else if (203 <= headingInt && headingInt < 248) {
-            heading = "SW";
-          } else if (248 <= headingInt && headingInt < 293) {
-            heading = "S";
-          } else if (293 <= headingInt && headingInt < 338) {
-            heading = "SE";
+              final int headingInt = header.get("heading").intValue(0);
+              String heading = "";
+              if (headingInt < 23 || headingInt >= 338) {
+                  heading = "E";
+              } else if (23 <= headingInt && headingInt < 68) {
+                  heading = "NE";
+              } else if (68 <= headingInt && headingInt < 113) {
+                  heading = "N";
+              } else if (113 <= headingInt && headingInt < 158) {
+                  heading = "NW";
+              } else if (158 <= headingInt && headingInt < 203) {
+                  heading = "W";
+              } else if (203 <= headingInt && headingInt < 248) {
+                  heading = "SW";
+              } else if (248 <= headingInt && headingInt < 293) {
+                  heading = "S";
+              } else if (293 <= headingInt && headingInt < 338) {
+                  heading = "SE";
+              }
+              final String uri = "/vehicle/" +
+                      ag.get("country").stringValue() +
+                      "/" + ag.get("state").stringValue() +
+                      "/" + ag.get("id").stringValue() +
+                      "/" + parseUri(id);
+              final Record vehicle = Record.of()
+                      .slot("id", id)
+                      .slot("uri", uri)
+                      .slot("dirId", dirId)
+                      .slot("index", ag.get("index").intValue())
+                      .slot("latitude", latitude)
+                      .slot("longitude", longitude)
+                      .slot("routeTag", routeTag)
+                      .slot("secsSinceReport", secsSinceReport)
+                      .slot("speed", speed)
+                      .slot("heading", heading);
+              vehicles.add(vehicle);
           }
-          final String uri = "/vehicle/" + ag.getCountry() + "/" + ag.getState() + "/" + ag.getId() + "/" + parseUri(id);
-          final Vehicle vehicle = new Vehicle().withId(id).withUri(uri).withDirId(dirId).withIndex(ag.getIndex())
-              .withLatitude(latitude).withLongitude(longitude).withRouteTag(routeTag).withSecsSinceReport(secsSinceReport)
-              .withSpeed(speed).withHeading(heading);
-          vehicles.add(vehicle);
-        }
       }
       return vehicles;
-    } catch (Exception e) {
+  } catch (Exception e) {
       log.severe(() -> String.format("Exception thrown:\n%s", e));
-    }
-    return null;
   }
+  return null;
+}
 
-  private static String parseUri(String uri) {
-    try {
+private static String parseUri(String uri) {
+  try {
       return java.net.URLEncoder.encode(uri, "UTF-8").toString();
-    } catch (UnsupportedEncodingException e) {
+  } catch (UnsupportedEncodingException e) {
       return null;
-    }
   }
+}
 ```
 
 ##### <a name="timers-tasks-and-polling"></a>Timers, tasks, and polling
