@@ -22,7 +22,7 @@ To build this application, we'll need the JDK for <a href="https://www.oracle.co
 
 #### <a name="gradle-setup"></a>Building with Gradle
 
-We’ll be using Gradle to build the application. Click here for installation instructions. We'll start with some boilerplate that will generally require little changes across projects. First, we will copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
+We’ll be using Gradle to build the application, installation instructions can be found <a href="https://gradle.org/install/">here</a>. Click here for installation instructions. We'll start with some boilerplate that will generally require little changes across projects. First, we will copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
 
 - https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/build.gradle#L22-L25
 
