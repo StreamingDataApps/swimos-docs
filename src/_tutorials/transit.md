@@ -119,11 +119,29 @@ We will implement Web Agents for each of our entities under `server/src/main/jav
 - `State.java`
 - `Vehicle.java`
 
-We will define our application entry point under `server/src/main/java/swim/transit/` as `TransitPlane.java`.
+#### <a name="creating-a-web-agent"></a>Creating a Web Agent
+
+We will now create a barebones Web Agent for the vehicle entity. To do that, we’ll start by extending `AbstractAgent` and override the `didStart()` method:
+
+```java
+package swim.transit.agent;
+
+import swim.api.agent.AbstractAgent;
+import java.util.logging.Logger;
+
+public class VehicleAgent extends AbstractAgent {
+
+  @Override
+  public void didStart() {
+    log.info(()-> String.format("Started Agent: %s", nodeUri()));
+  }
+
+}
+```
 
 #### <a name="creating-the-app-plane"></a>Creating the App Plane
 
-We begin by extending `TransitPlane` from the `AbstractPlane` base class, which will allow us to declare the application routes. The agent corresponding to each route is declared using the `@SwimAgent` annotation. The application routes are declared using the `@SwimRoute` annotation. The route itself is defined via the generic `AgentRoute` type.
+We will define our application entry point under `server/src/main/java/swim/transit/` as `TransitPlane.java`. We can do this by extending `TransitPlane` from the `AbstractPlane` base class, which will allow us to declare the application routes. The agent corresponding to each route is declared using the `@SwimAgent` annotation. The application routes are declared using the `@SwimRoute` annotation. The route itself is defined via the generic `AgentRoute` type.
 
 ```java
 package swim.transit;
@@ -152,26 +170,6 @@ public class TransitPlane extends AbstractPlane {
 
     kernel.run(); // blocks until termination
   }
-}
-```
-
-#### <a name="creating-a-web-agent"></a>Creating a Web Agent
-
-We will now create a barebones Web Agent for the vehicle entity. To do that, we’ll start by extending `AbstractAgent` and override the `didStart()` method:
-
-```java
-package swim.transit.agent;
-
-import swim.api.agent.AbstractAgent;
-import java.util.logging.Logger;
-
-public class VehicleAgent extends AbstractAgent {
-
-  @Override
-  public void didStart() {
-    log.info(()-> String.format("Started Agent: %s", nodeUri()));
-  }
-
 }
 ```
 
