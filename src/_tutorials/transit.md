@@ -130,6 +130,7 @@ import swim.api.agent.AbstractAgent;
 import java.util.logging.Logger;
 
 public class VehicleAgent extends AbstractAgent {
+  private static final Logger log = Logger.getLogger(VehicleAgent.class.getName());
 
   @Override
   public void didStart() {
