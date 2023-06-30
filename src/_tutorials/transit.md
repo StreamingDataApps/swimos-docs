@@ -47,9 +47,9 @@ From the root project directory, the directory structure should currently look l
     - wrapper
       - gradle-wrapper.jar
       - gradle-wrapper.properties
-    - gradlew
-    - gradlew.bat
-    - settings.gradle
+  - gradlew
+  - gradlew.bat
+  - settings.gradle
 
 To fill out the Java application structure under `server`, just do the following:
 
