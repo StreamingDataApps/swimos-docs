@@ -22,7 +22,7 @@ To build this application, we'll need the JDK for <a href="https://www.oracle.co
 
 #### <a name="gradle-setup"></a>Building with Gradle
 
-We’ll be using Gradle to build the application, installation instructions can be found <a href="https://gradle.org/install/">here</a>. Click here for installation instructions. We'll start with some boilerplate that will generally require little changes across projects. First, we will copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
+We’ll be using Gradle to build the application, installation instructions can be found <a href="https://gradle.org/install/">here</a>. We'll start with some boilerplate that will generally require little changes across projects. First, we will copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
 
 - https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/build.gradle#L22-L25
 
@@ -31,9 +31,7 @@ Next, we'll copy gradle.properties to the same location:
 - https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradlew
 - https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradlew.bat
 - https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/settings.gradle
-- https://github.com/swimos/transit/tree/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradle/wrapper
-
-`settings.gradle` specifies the root project name. `gradlew` and `gradlew.bat` are wrappers that should not generally be modified. `gradle.properties` specifies the version of the application and the swim libraries. The `gradle` directory contains the `wrapper` sub-directory which contains dependencies for `gradlew` and `gradlew.bat`, which stream-line dependency issues when using gradle. 
+- https://github.com/swimos/transit/tree/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradle
 
 ### <a name="project-organization"></a>Project organization
 
@@ -60,21 +58,32 @@ mkdir -p src/main/resources
 
 #### <a name="creating-initial-files"></a>Creating the app configuration files
 
-We will be creating the following files:
-- `server/src/main/resources/server.recon`
-- `server/src/main/java/module-info.java`
-
-We’ll create `server.recon` under the `resources` directory and add the following code:
+We will be creating the following configuration file: `server/src/main/resources/server.recon`
 
 ```java
 @kernel(class: 'swim.store.db.DbStoreKernel', optional: true)
 @kernel(class: 'swim.reflect.ReflectKernel', optional: true)
 
 transit: @fabric {
-  @plane(class: "swim.transit.TransitPlane")
-  @store {
-    path: "/tmp/swim-transit/"
-  }
+    @node {
+        pattern: "/country/:id"
+        @agent(class: "swim.transit.agent.CountryAgent")
+    }
+    @node {
+        pattern: "/state/:country/:state"
+        @agent(class: "swim.transit.agent.StateAgent")
+    }
+    @node {
+        pattern: "/agency/:country/:state/:id"
+        @agent(class: "swim.transit.agent.AgencyAgent")
+    }
+    @node {
+        pattern: "/vehicle/:country/:state/:agency/:id"
+        @agent(class: "swim.transit.agent.VehicleAgent")
+    }
+    @store {
+        path: "/tmp/swim-transit/"
+    }
 }
 
 @web(port: 9001) {
@@ -89,22 +98,6 @@ transit: @fabric {
 `@kernel` is used to specify kernel properties that determine runtime settings. Then, within the `@fabric` definition, we specify the Java class that will serve as our application entry point, `TransitPlane`. We define @store to use the file system as a lightweight backing store, though in-memory remains the primary state store.
 
 Lastly, we need to configure the client-facing end-point. We do that using the @web directive where we set the port to `9001`. We tie the end-point to the fabric using the `space` property so it names the fabric’s key. We turn off websocket compression by setting `serverCompressionLevel` and `clientCompressionLevel` to 0.
-
-For `module-info.java` which specifies internal library dependencies, dependencies for our backend service, and the service implementation our service provides, we'll specify the following code:
-
-```java
-open module swim.transit {
-  requires swim.xml;
-  requires transitive swim.api;
-  requires swim.server;
-  requires java.logging;
-
-  exports swim.transit;
-  exports swim.transit.model;
-
-  provides swim.api.plane.Plane with swim.transit.TransitPlane;
-}
-```
 
 We will be using a CSV file to load transit information for 46 transit agencies into Web Agents:
 - https://raw.githubusercontent.com/swimos/transit/master/server/src/main/resources/agencies.csv
@@ -286,6 +279,147 @@ Let’s re-run our code to observe recordings of speed and derivations of accele
 
 We’ve already implemented VehicleAgent, so we’ll move on to the remaining agents for state, country, and agent.
 
+#### <a name="implement-agency-agent"></a>Implement AgencyAgent
+
+##### <a name="Implement NextBusHttpAPI transit wrapper"></a>Implement NextBusHttpAPI transit wrapper
+
+There are two public transit APIs we will connect to from UmoIQ (https://retro.umoiq.com/xmlFeedDocs/NextBusXMLFeed.pdf):
+https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a={agencyId}
+https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a={agencyId}&t=0
+
+We will encapsulate this functionality with a wrapper, `NextBusHttpAPI.java`, that will sit alongside TransitPlane.java under `server/src/main/java/swim/transit/NextBusHttpAPI.java`. The first end-point corresponds to the `routeList` command, and will return a route object with a `tag`, `title`, and `shortTitle`. We will make use of the tag and title fields. 
+
+```java
+  private static Value getRoutes(Value ag) {
+      try {
+          final URL url = new URL(String.format(
+                  "https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a=%s", ag.get("id").stringValue()));
+          final Value allRoutes = parse(url);
+          if (!allRoutes.isDefined()) {
+              return null;
+          }
+          final Iterator<Item> it = allRoutes.iterator();
+          final Record routes = Record.of();
+          while (it.hasNext()) {
+              final Item item = it.next();
+              final Value header = item.getAttr("route");
+              if (header.isDefined()) {
+                  final Value route = Record.of()
+                          .slot("tag", header.get("tag").stringValue())
+                          .slot("title", header.get("title").stringValue());
+                  routes.item(route);
+              }
+          }
+          return routes;
+      } catch (Exception e) {
+          log.severe(() -> String.format("Exception thrown:\n%s", e));
+      }
+      return null;
+  }
+
+
+  private static Value parse(URL url) {
+      final HttpURLConnection urlConnection;
+      try {
+          urlConnection = (HttpURLConnection) url.openConnection();
+          urlConnection.setRequestProperty("Accept-Encoding", "gzip, deflate");
+          final InputStream stream = new GZIPInputStream(urlConnection.getInputStream());
+          final Value configValue = Utf8.read(stream, Xml.structureParser().documentParser());
+          return configValue;
+      } catch (Throwable e) {
+          log.severe(() -> String.format("Exception thrown:\n%s", e));
+      }
+      return Value.absent();
+  }
+
+```
+
+The second end-point corresponds to the `vehicleLocations` command, and will return a vehicle  object with fields for `id`, `routeTag`, `dirTag`, `lat`, `long`, `secsSinceReport`, `predictable` and `heading`. 
+
+```java
+
+  public static Value getVehicleLocations(String pollUrl, Value ag) {
+  try {
+      final URL url = new URL(pollUrl);
+      final Value vehicleLocs = parse(url);
+      if (!vehicleLocs.isDefined()) {
+          return null;
+      }
+
+      final Iterator<Item> it = vehicleLocs.iterator();
+      final Record vehicles = Record.of();
+      while (it.hasNext()) {
+          final Item item = it.next();
+          final Value header = item.getAttr("vehicle");
+          if (header.isDefined()) {
+              final String id = header.get("id").stringValue().trim();
+              final String routeTag = header.get("routeTag").stringValue();
+              final float latitude = header.get("lat").floatValue(0.0f);
+              final float longitude = header.get("lon").floatValue(0.0f);
+              final int speed = header.get("speedKmHr").intValue(0);
+              final int secsSinceReport = header.get("secsSinceReport").intValue(0);
+              final String dir = header.get("dirTag").stringValue("");
+              final String dirId;
+              if (!dir.equals("")) {
+                  dirId = dir.contains("_0") ? "outbound" : "inbound";
+              } else {
+                  dirId = "outbound";
+              }
+
+              final int headingInt = header.get("heading").intValue(0);
+              String heading = "";
+              if (headingInt < 23 || headingInt >= 338) {
+                  heading = "E";
+              } else if (23 <= headingInt && headingInt < 68) {
+                  heading = "NE";
+              } else if (68 <= headingInt && headingInt < 113) {
+                  heading = "N";
+              } else if (113 <= headingInt && headingInt < 158) {
+                  heading = "NW";
+              } else if (158 <= headingInt && headingInt < 203) {
+                  heading = "W";
+              } else if (203 <= headingInt && headingInt < 248) {
+                  heading = "SW";
+              } else if (248 <= headingInt && headingInt < 293) {
+                  heading = "S";
+              } else if (293 <= headingInt && headingInt < 338) {
+                  heading = "SE";
+              }
+              final String uri = "/vehicle/" +
+                      ag.get("country").stringValue() +
+                      "/" + ag.get("state").stringValue() +
+                      "/" + ag.get("id").stringValue() +
+                      "/" + parseUri(id);
+              final Record vehicle = Record.of()
+                      .slot("id", id)
+                      .slot("uri", uri)
+                      .slot("dirId", dirId)
+                      .slot("index", ag.get("index").intValue())
+                      .slot("latitude", latitude)
+                      .slot("longitude", longitude)
+                      .slot("routeTag", routeTag)
+                      .slot("secsSinceReport", secsSinceReport)
+                      .slot("speed", speed)
+                      .slot("heading", heading);
+              vehicles.add(vehicle);
+          }
+      }
+      return vehicles;
+  } catch (Exception e) {
+      log.severe(() -> String.format("Exception thrown:\n%s", e));
+  }
+  return null;
+}
+
+private static String parseUri(String uri) {
+  try {
+      return java.net.URLEncoder.encode(uri, "UTF-8").toString();
+  } catch (UnsupportedEncodingException e) {
+      return null;
+  }
+}
+```
+
 #### <a name="implement-state-agent"></a>Implement StateAgent
 
 Let’s implement StateAgent to manage the agencies and vehicles operating within the State. The basic lanes we’ll create maintain high-level statistics and element collections.
@@ -310,7 +444,7 @@ Let’s implement StateAgent to manage the agencies and vehicles operating withi
   public MapLane<Value, Float> agencySpeed;
 ```
 
-The more interesting lanes allow us to link to other agents, such as Agency and Vehicle, here. We’ll make use of SwimOS’s `JoinValueLane` to reflect the vehicle count and average vehicle speed for each agency. We’ll reflect the topology of agencies and vehicles by aggregating each agency and each agency’s vehicles. Then, we’ll link to an agency with respect to specific lanes with `addAgency()`, while making use of AbstractAgent’s context object to send commands to other Web Agents. We will materialize the links using the downlink command exposed on all join lane types, passing in an Agency data object as the key:
+The join lanes allow us to link to other agents, such as Agency and Vehicle. We’ll make use of SwimOS’s `JoinValueLane` to reflect the vehicle count and average vehicle speed for each agency. We’ll reflect the topology of agencies and vehicles by aggregating each agency and each agency’s vehicles. Then, we’ll link to an agency with respect to specific lanes with `addAgency()`, while making use of AbstractAgent’s context object to send commands to other Web Agents. We will materialize the links using the downlink command exposed on all join lane types, passing in an Agency data object as the key:
 
 ```java
 joinAgencySpeed.downlink(agency).nodeUri(agency.getUri()).laneUri("speed").open();
@@ -399,243 +533,3 @@ CountryAgent will be nearly identical to StateAgent, except we’ll aggregate on
   });
 
 ```
-
-#### <a name="implement-agency-agent"></a>Implement AgencyAgent
-
-##### <a name="Implement NextBusHttpAPI transit wrapper"></a>Implement NextBusHttpAPI transit wrapper
-
-There are two public transit APIs we will connect to from UmoIQ (https://retro.umoiq.com/xmlFeedDocs/NextBusXMLFeed.pdf):
-https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a={agencyId}
-https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a={agencyId}&t=0
-
-We will encapsulate this functionality with a wrapper, `NextBusHttpAPI.java`, that will sit alongside TransitPlane.java under `server/src/main/java/swim/transit/NextBusHttpAPI.java`.
-
-###### <a name="route-list"></a>routeList
-
-The first end-point corresponds to the `routeList` command, and will return a route object with a `tag`, `title`, and `shortTitle`. We will make use of the tag and title fields. Passing in “sf-muni” as the agency would correspond to the following input and output.
-
-INPUT:
-
-```java
-https://retro.umoiq.com/service/publicXMLFeed?command=routeList& a=sf-muni
-```
-
-OUTPUT:
-
-```xml
-<body>
-  <route tag="1" title="1 - California" shortTitle="1-Calif"/>
-  <route tag="3" title="3 - Jackson" shortTitle="3-Jacksn"/>
-  <route tag="4" title="4 - Sutter" shortTitle="4-Sutter"/>
-  <route tag="5" title="5 - Fulton" shortTitle="5-Fulton"/>
-  <route tag="6" title="6 - Parnassus" shortTitle="6-Parnas"/>
-  <route tag="7" title="7 - Haight" shortTitle="7-Haight"/>
-  <route tag="14" title="14 - Mission" shortTitle="14-Missn"/>
-  <route tag="21" title="21 - Hayes" shortTitle="21-Hayes"/>
-</body>
-```
-
-We can incorporate this API within `NextBusHttpAPI` in our code like this:
-
-```java
-  private static Value getRoutes(Value ag) {
-      try {
-          final URL url = new URL(String.format(
-                  "https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a=%s", ag.get("id").stringValue()));
-          final Value allRoutes = parse(url);
-          if (!allRoutes.isDefined()) {
-              return null;
-          }
-          final Iterator<Item> it = allRoutes.iterator();
-          final Record routes = Record.of();
-          while (it.hasNext()) {
-              final Item item = it.next();
-              final Value header = item.getAttr("route");
-              if (header.isDefined()) {
-                  final Value route = Record.of()
-                          .slot("tag", header.get("tag").stringValue())
-                          .slot("title", header.get("title").stringValue());
-                  routes.item(route);
-              }
-          }
-          return routes;
-      } catch (Exception e) {
-          log.severe(() -> String.format("Exception thrown:\n%s", e));
-      }
-      return null;
-  }
-
-
-  private static Value parse(URL url) {
-      final HttpURLConnection urlConnection;
-      try {
-          urlConnection = (HttpURLConnection) url.openConnection();
-          urlConnection.setRequestProperty("Accept-Encoding", "gzip, deflate");
-          final InputStream stream = new GZIPInputStream(urlConnection.getInputStream());
-          final Value configValue = Utf8.read(stream, Xml.structureParser().documentParser());
-          return configValue;
-      } catch (Throwable e) {
-          log.severe(() -> String.format("Exception thrown:\n%s", e));
-      }
-      return Value.absent();
-  }
-
-```
-
-###### <a name="vehicle-locations"></a>vehicleLocations
-
-The second end-point corresponds to the `vehicleLocations` command, and will return a vehicle  object with fields for `id`, `routeTag`, `dirTag`, `lat`, `long`, `secsSinceReport`, `predictable` and `heading`. Here is an example request and response.
-
-INPUT:
-
-```
-https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a=sf-muni&r=N&t=1144953500233
-```
-
-OUTPUT:
-
-```xml
-<body>
-<vehicle id="1453" routeTag="N" dirTag="out" lat="37.7664199" lon="-
-122.44896" secsSinceReport="29" predictable="true" heading="276"/>
-<vehicle id="1549" routeTag="N" dirTag="in" lat="37.77631" lon="-
-122.3941" secsSinceReport="3" predictable="true" heading="45"/>
-<vehicle id="1517" routeTag="N" dirTag="in_short" lat="37.76035" lon="-
-122.50794" secsSinceReport="69" predictable="true" heading="267"/>
-<vehicle id="1547" routeTag="N" dirTag="out" lat="37.76952" lon="-
-122.43174" secsSinceReport="28" predictable="true" heading="85"/>
-<vehicle id="1404" routeTag="N" dirTag="out" lat="37.76003" lon="-
-122.50919" secsSinceReport="9" predictable="true" heading="117"/>
-<vehicle id="1400" routeTag="N" dirTag="in" lat="37.76415" lon="-
-122.46409" secsSinceReport="50" predictable="true" heading="266"/>
-<lastTime time="1144953510433"/>
-</body>
-```
-
-We can incorporate this API in our code like this:
-
-```java
-
-  public static Value getVehicleLocations(String pollUrl, Value ag) {
-  try {
-      final URL url = new URL(pollUrl);
-      final Value vehicleLocs = parse(url);
-      if (!vehicleLocs.isDefined()) {
-          return null;
-      }
-
-      final Iterator<Item> it = vehicleLocs.iterator();
-      final Record vehicles = Record.of();
-      while (it.hasNext()) {
-          final Item item = it.next();
-          final Value header = item.getAttr("vehicle");
-          if (header.isDefined()) {
-              final String id = header.get("id").stringValue().trim();
-              final String routeTag = header.get("routeTag").stringValue();
-              final float latitude = header.get("lat").floatValue(0.0f);
-              final float longitude = header.get("lon").floatValue(0.0f);
-              final int speed = header.get("speedKmHr").intValue(0);
-              final int secsSinceReport = header.get("secsSinceReport").intValue(0);
-              final String dir = header.get("dirTag").stringValue("");
-              final String dirId;
-              if (!dir.equals("")) {
-                  dirId = dir.contains("_0") ? "outbound" : "inbound";
-              } else {
-                  dirId = "outbound";
-              }
-
-              final int headingInt = header.get("heading").intValue(0);
-              String heading = "";
-              if (headingInt < 23 || headingInt >= 338) {
-                  heading = "E";
-              } else if (23 <= headingInt && headingInt < 68) {
-                  heading = "NE";
-              } else if (68 <= headingInt && headingInt < 113) {
-                  heading = "N";
-              } else if (113 <= headingInt && headingInt < 158) {
-                  heading = "NW";
-              } else if (158 <= headingInt && headingInt < 203) {
-                  heading = "W";
-              } else if (203 <= headingInt && headingInt < 248) {
-                  heading = "SW";
-              } else if (248 <= headingInt && headingInt < 293) {
-                  heading = "S";
-              } else if (293 <= headingInt && headingInt < 338) {
-                  heading = "SE";
-              }
-              final String uri = "/vehicle/" +
-                      ag.get("country").stringValue() +
-                      "/" + ag.get("state").stringValue() +
-                      "/" + ag.get("id").stringValue() +
-                      "/" + parseUri(id);
-              final Record vehicle = Record.of()
-                      .slot("id", id)
-                      .slot("uri", uri)
-                      .slot("dirId", dirId)
-                      .slot("index", ag.get("index").intValue())
-                      .slot("latitude", latitude)
-                      .slot("longitude", longitude)
-                      .slot("routeTag", routeTag)
-                      .slot("secsSinceReport", secsSinceReport)
-                      .slot("speed", speed)
-                      .slot("heading", heading);
-              vehicles.add(vehicle);
-          }
-      }
-      return vehicles;
-  } catch (Exception e) {
-      log.severe(() -> String.format("Exception thrown:\n%s", e));
-  }
-  return null;
-}
-
-private static String parseUri(String uri) {
-  try {
-      return java.net.URLEncoder.encode(uri, "UTF-8").toString();
-  } catch (UnsupportedEncodingException e) {
-      return null;
-  }
-}
-```
-
-##### <a name="timers-tasks-and-polling"></a>Timers, tasks, and polling
-
-### <a name="running-the-complete-demo"></a>Running the complete demo
-
-#### Windows
-
-Install the <a href="https://docs.microsoft.com/en-us/windows/wsl/install-win10">Windows Subsystem for Linux</a>.
-
-Execute the command `./run.sh` from a console pointed to the application's home directory. This will start a Swim server, seeded with the application's logic, on port 9002.
-
-   ```console
-    user@machine:~$ ./run.sh
-   ```
-
-#### \*nix
-
-Execute the command `./run.sh` from a console pointed to the application's home directory. This will start a Swim server, seeded with the application's logic, on port 9002.
-
-   ```console
-    user@machine:~$ ./run.sh
-   ```
-
-#### View the UI
-Open the following URL on your browser: http://localhost:9002.
-
-### <a name="running-the-complete-demo-as-fabric"></a>Running the complete demo as a fabric
-
-Run two Swim instances on your local machine to distribute the applications Web Agents between the two processes.
-
-```console
-# Build the UI
-server $ ./build.sh
-
-# Start the first fabric node in one terminal window:
-server $ ./gradlew run -Dswim.config.resource=server-a.recon
-
-# Start the second fabric node in another terminal window:
-server $ ./gradlew run -Dswim.config.resource=server-b.recon
-```
-
-When both processes are up and running, you can point your browser at either http://localhost:9008 (Server A) or http://localhost:9009 (Server B). You will see a live view of all Web Agents, regardless of which server you point your browser at. Swim transparently demultiplexes links opened by external clients, and routes them to the appropriate server in the fabric.
