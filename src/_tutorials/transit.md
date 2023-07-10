@@ -61,7 +61,6 @@ mkdir -p src/main/resources
 We will be creating the following configuration file: `server/src/main/resources/server.recon`
 
 ```java
-@kernel(class: 'swim.store.db.DbStoreKernel', optional: true)
 @kernel(class: 'swim.reflect.ReflectKernel', optional: true)
 
 transit: @fabric {
@@ -230,16 +229,14 @@ Think of `Record` as a `JSON object`, with slots being the key-value pairs. Letâ
 
 #### <a name="acting-on-state-changes"></a>Acting on state changes
 
-We'll now modify `VehicleAgent` a bit more to derive acceleration from time and speed, as well as store the last 10 speed and acceleration data points. We're going to specify `@Transient` to opt out of backing to disk since the data is truly transient and we would prefer to start clean whenever an agent loads.
+We'll now modify `VehicleAgent` a bit more to derive acceleration from time and speed, as well as store the last 10 speed and acceleration data points.
 
 ```java
   private long lastReportedTime = 0L;
 
-  @SwimTransient
   @SwimLane("speeds")
   public MapLane<Long, Integer> speeds;
 
-  @SwimTransient
   @SwimLane("accelerations")
   public MapLane<Long, Integer> accelerations;
 ```
@@ -428,18 +425,15 @@ Letâ€™s implement StateAgent to manage the agencies and vehicles operating withi
  @SwimLane("count")
   public ValueLane<Value> count;
 
- @SwimTransient
   @SwimLane("agencyCount")
   public MapLane<Value, Integer> agencyCount;
 
- @SwimTransient
   @SwimLane("vehicles")
   public MapLane<String, Value> vehicles;
 
  @SwimLane("speed")
   public ValueLane<Float> speed;
 
-  @SwimTransient
   @SwimLane("agencySpeed")
   public MapLane<Value, Float> agencySpeed;
 ```
