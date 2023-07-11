@@ -106,10 +106,10 @@ This CSV data file contains the fields for each agency: `id`, `state`, and `coun
 ### <a name="first-contact"></a>First Contact
 
 We will implement Web Agents for each of our entities under `server/src/main/java/swim/transit/agent/`:
-- `Agency.java`
-- `Country.java`
-- `State.java`
-- `Vehicle.java`
+- `AgencyAgent.java`
+- `CountryAgent.java`
+- `StateAgent.java`
+- `VehicleAgent.java`
 
 #### <a name="creating-a-web-agent"></a>Creating a Web Agent
 
