@@ -450,7 +450,27 @@ private static String parseUri(String uri) {
 Let’s implement StateAgent to manage the agencies and vehicles operating within the State. The basic lanes we’ll create maintain high-level statistics and element collections.
 
 ```java
- @SwimLane("count")
+package swim.transit.agent;
+
+import java.util.Iterator;
+import java.util.logging.Logger;
+
+import swim.api.SwimLane;
+import swim.api.agent.AbstractAgent;
+import swim.api.lane.CommandLane;
+import swim.api.lane.JoinMapLane;
+import swim.api.lane.JoinValueLane;
+import swim.api.lane.MapLane;
+import swim.api.lane.ValueLane;
+import swim.structure.Record;
+import swim.structure.Value;
+
+import java.util.logging.Logger;
+
+public class StateAgent extends AbstractAgent {
+  private static final Logger log = Logger.getLogger(StateAgent.class.getName());
+    
+  @SwimLane("count")
   public ValueLane<Value> count;
 
   @SwimLane("agencyCount")
@@ -464,6 +484,7 @@ Let’s implement StateAgent to manage the agencies and vehicles operating withi
 
   @SwimLane("agencySpeed")
   public MapLane<Value, Float> agencySpeed;
+}
 ```
 
 The join lanes allow us to link to other agents, such as Agency and Vehicle. We’ll make use of SwimOS’s `JoinValueLane` to reflect the vehicle count and average vehicle speed for each agency. We’ll reflect the topology of agencies and vehicles by aggregating each agency and each agency’s vehicles. Then, we’ll link to an agency with respect to specific lanes with `addAgency()`, while making use of AbstractAgent’s context object to send commands to other Web Agents. We will materialize the links using the downlink command exposed on all join lane types, passing in an Agency data object as the key:
