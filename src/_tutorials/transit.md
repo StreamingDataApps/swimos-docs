@@ -56,7 +56,7 @@ mkdir -p src/main/resources
 
 #### <a name="creating-initial-files"></a>Creating the app configuration files
 
-We will be creating the following configuration file: `server/src/main/resources/server.recon`
+We will be creating the following configuration <a href="https://github.com/swimos/tutorial-transit/blob/main/server/src/main/resources/server.recon">file</a>: `server/src/main/resources/server.recon`
 
 ```java
 @kernel(class: 'swim.reflect.ReflectKernel', optional: true)
@@ -111,7 +111,7 @@ We will implement Web Agents for each of our entities under `server/src/main/jav
 
 #### <a name="creating-a-web-agent"></a>Creating a Web Agent
 
-We will now create a barebones Web Agent for the vehicle entity. To do that, we’ll start by extending `AbstractAgent` and override the `didStart()` method:
+We will now create a barebones Web Agent for the vehicle entity, <a href="https://github.com/swimos/tutorial-transit/blob/main/server/src/main/java/swim/transit/agent/VehicleAgent.java">VehicleAgent.java</a>. To do that, we’ll start by extending `AbstractAgent` and override the `didStart()` method:
 
 ```java
 package swim.transit.agent;
@@ -132,7 +132,7 @@ public class VehicleAgent extends AbstractAgent {
 
 #### <a name="creating-the-app-plane"></a>Creating the App Plane
 
-We will define our application entry point under `server/src/main/java/swim/transit/` as `TransitPlane.java`. We can do this by extending `TransitPlane` from the `AbstractPlane` base class, which will allow us to declare the application routes. The agent corresponding to each route is declared using the `@SwimAgent` annotation. The application routes are declared using the `@SwimRoute` annotation. The route itself is defined via the generic `AgentRoute` type.
+We will define our application entry point under `server/src/main/java/swim/transit/` as <a href="https://github.com/swimos/tutorial-transit/blob/main/server/src/main/java/swim/transit/TransitPlane.java">TransitPlane.java</a>. We can do this by extending `TransitPlane` from the `AbstractPlane` base class, which will allow us to declare the application routes. The agent corresponding to each route is declared using the `@SwimAgent` annotation. The application routes are declared using the `@SwimRoute` annotation. The route itself is defined via the generic `AgentRoute` type.
 
 ```java
 package swim.transit;
@@ -294,7 +294,7 @@ There are two public transit APIs we will connect to from UmoIQ (https://retro.u
 https://retro.umoiq.com/service/publicXMLFeed?command=routeList&a={agencyId}
 https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a={agencyId}&t=0
 
-We will encapsulate this functionality with a wrapper, `NextBusHttpAPI.java`, that will sit alongside TransitPlane.java under `server/src/main/java/swim/transit/NextBusHttpAPI.java`. The first end-point corresponds to the `routeList` command, and will return a route object with a `tag`, `title`, and `shortTitle`. We will make use of the tag and title fields. 
+We will encapsulate this functionality with a wrapper, <a href="https://github.com/swimos/tutorial-transit/blob/main/server/src/main/java/swim/transit/NextBusHttpAPI.java">NextBusHttpAPI.java</a>, that will sit alongside TransitPlane.java under `server/src/main/java/swim/transit/NextBusHttpAPI.java`. The first end-point corresponds to the `routeList` command, and will return a route object with a `tag`, `title`, and `shortTitle`. We will make use of the tag and title fields. 
 
 ```java
 import java.io.InputStream;
@@ -447,7 +447,7 @@ private static String parseUri(String uri) {
 
 #### <a name="implement-state-agent"></a>Implement StateAgent
 
-Let’s implement StateAgent to manage the agencies and vehicles operating within the State. The basic lanes we’ll create maintain high-level statistics and element collections.
+Let’s implement <a href="https://github.com/swimos/tutorial-transit/blob/main/server/src/main/java/swim/transit/agent/StateAgent.java">StateAgent</a> to manage the agencies and vehicles operating within the State. The basic lanes we’ll create maintain high-level statistics and element collections.
 
 ```java
 package swim.transit.agent;
@@ -554,7 +554,7 @@ Here is the relevant code for the StateAgent:
 
 #### <a name="implement-country-agent"></a>Implement CountryAgent
 
-CountryAgent will be nearly identical to StateAgent, except we’ll aggregate on the state level. `addAgency` represents the essential difference.
+<a href="https://github.com/swimos/tutorial-transit/blob/main/server/src/main/java/swim/transit/agent/CountryAgent.java">CountryAgent</a> will be nearly identical to StateAgent, except we’ll aggregate on the state level. `addAgency` represents the essential difference.
 
 ```java
   @SwimLane("addAgency")
