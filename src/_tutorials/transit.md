@@ -178,6 +178,14 @@ We'll see that our plane has started and that the VehicleAgent is running.
 We will define a CommandLane that receives commands to update the state managed by a VehicleAgent whenever new values for that state are returned by the traffic API. Our vehicle data has been stored in a `Value` object that exposes `get()` methods to retrieve data from a generic structure. We will store the `Value` by defining a `ValueLane` and adding a handler that logs each state change.
 
 ```java
+import swim.api.SwimLane;
+import swim.api.lane.CommandLane;
+import swim.api.lane.ValueLane;
+import swim.recon.Recon;
+import swim.structure.Record;
+import swim.structure.Value;
+
+...
 
   @SwimLane("vehicle")
   public ValueLane<Value> vehicle = this.<Value>valueLane()
@@ -203,22 +211,23 @@ space.command("/vehicle/US/CA/poseurs/dummy", "fake", Value.empty());
 becomes
 
 ```java
-    Record dummyVehicleInfo = Record.of()
-            .slot("id", "8888")
-            .slot("uri", "/vehicle/US/CA/poseurs/dummy/8888")
-            .slot("dirId", "outbound")
-            .slot("index", 26)
-            .slot("latitude", 34.07749)
-            .slot("longitude", -117.44896)
-            .slot("routeTag", "61")
-            .slot("secsSinceReport", 9)
-            .slot("speed", 0)
-            .slot("heading", "N");
-
-    space.command("/vehicle/US/CA/poseurs/dummy", "updateVehicle", dummyVehicleInfo);
+      Record dummyVehicleInfo = Record.of()
+              .slot("id", "8888")
+              .slot("uri", "/vehicle/US/CA/poseurs/dummy/8888")
+              .slot("dirId", "outbound")
+              .slot("index", 26)
+              .slot("latitude", 34.07749)
+              .slot("longitude", -117.44896)
+              .slot("routeTag", "61")
+              .slot("secsSinceReport", 9)
+              .slot("speed", 0)
+              .slot("heading", "N");
+  
+      space.command("/vehicle/US/CA/poseurs/dummy", "updateVehicle", dummyVehicleInfo);
 ```
 
 Think of `Record` as a `JSON object`, with slots being the key-value pairs. Let’s re-run now to confirm that our command has been received and the state has been stored:
+
 ```console
 ./gradlew build
 ./gradlew run
@@ -240,7 +249,11 @@ We'll now modify `VehicleAgent` a bit more to derive acceleration from time and 
 
 You can now modify `onUpdateVehicle` to handle acceleration and speed. 
 
-```java 
+```java
+import swim.api.lane.MapLane;
+
+...
+
  private void onUpdateVehicle(Value v) {
     final Value oldState = vehicle.get();
     final long time = System.currentTimeMillis() - (v.get("secsSinceReport").longValue(0) * 1000L);
@@ -284,6 +297,24 @@ https://retro.umoiq.com/service/publicXMLFeed?command=vehicleLocations&a={agency
 We will encapsulate this functionality with a wrapper, `NextBusHttpAPI.java`, that will sit alongside TransitPlane.java under `server/src/main/java/swim/transit/NextBusHttpAPI.java`. The first end-point corresponds to the `routeList` command, and will return a route object with a `tag`, `title`, and `shortTitle`. We will make use of the tag and title fields. 
 
 ```java
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Iterator;
+import java.util.logging.Logger;
+import java.util.zip.GZIPInputStream;
+import swim.codec.Utf8;
+import swim.structure.Item;
+import swim.structure.Record;
+import swim.structure.Value;
+import swim.xml.Xml;
+
+public class NextBusHttpAPI {
+    private static final Logger log = Logger.getLogger(NextBusHttpAPI.class.getName());
+    private NextBusHttpAPI() { }
+
+
   private static Value getRoutes(Value ag) {
       try {
           final URL url = new URL(String.format(
@@ -325,13 +356,13 @@ We will encapsulate this functionality with a wrapper, `NextBusHttpAPI.java`, th
       }
       return Value.absent();
   }
-
+    
+}
 ```
 
 The second end-point corresponds to the `vehicleLocations` command, and will return a vehicle  object with fields for `id`, `routeTag`, `dirTag`, `lat`, `long`, `secsSinceReport`, `predictable` and `heading`. 
 
 ```java
-
   public static Value getVehicleLocations(String pollUrl, Value ag) {
   try {
       final URL url = new URL(pollUrl);
