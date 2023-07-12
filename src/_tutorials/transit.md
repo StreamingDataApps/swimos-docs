@@ -22,16 +22,13 @@ To build this application, we'll need the JDK for <a href="https://www.oracle.co
 
 #### <a name="gradle-setup"></a>Building with Gradle
 
-We’ll be using Gradle to build the application, installation instructions can be found <a href="https://gradle.org/install/">here</a>. We'll start with some boilerplate that will generally require little changes across projects. First, we will copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
+We’ll be using Gradle to build the application, installation instructions can be found <a href="https://gradle.org/install/">here</a>. We'll start with some boilerplate that will generally require little changes across projects. First, we will download the gradle files from this <a href="https://github.com/swimos/project-starter/blob/main/java/gradle-files.tgz">tarball</a> or <a href="https://github.com/swimos/project-starter/blob/main/java/gradle-files.zip">zip archive</a>.
 
-- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/build.gradle#L22-L25
+Then extract as appropriate to the server directory:
+- `tar zxvf ~/Downloads/gradle-files.tgz`
+- `unzip ~/Downloads/gradle-files.zip`
 
-Next, we'll copy gradle.properties to the same location:
-- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradle.properties
-- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradlew
-- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradlew.bat
-- https://github.com/swimos/transit/blob/e9ee859e9e768db47cf2b491b573aa3100642062/server/settings.gradle
-- https://github.com/swimos/transit/tree/e9ee859e9e768db47cf2b491b573aa3100642062/server/gradle
+copy `build.gradle` to our `server` directory. You can find a copy here, with the section most likely to change highlighted:
 
 ### <a name="project-organization"></a>Project organization
 
@@ -47,6 +44,7 @@ From the root project directory, the directory structure should currently look l
       - gradle-wrapper.properties
   - gradlew
   - gradlew.bat
+  - gradle.properties
   - settings.gradle
 
 To fill out the Java application structure under `server`, just do the following:
@@ -140,6 +138,8 @@ We will define our application entry point under `server/src/main/java/swim/tran
 package swim.transit;
 
 import swim.api.*;
+import swim.api.plane.AbstractPlane;
+import swim.api.space.Space;
 import swim.kernel.Kernel;
 import swim.server.ServerLoader;
 import swim.transit.agent.VehicleAgent;
@@ -148,9 +148,6 @@ import java.util.logging.Logger;
 
 public class TransitPlane extends AbstractPlane {
   private static final Logger log = Logger.getLogger(TransitPlane.class.getName());
-  @SwimAgent("vehicle")
-  @SwimRoute("/vehicle/:country/:state/:agency/:id")
-  AgentRoute<VehicleAgent> vehicleAgent;
 
   public static void main(String[] args) {
     final Kernel kernel = ServerLoader.loadServer();
